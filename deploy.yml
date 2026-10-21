@@ -1,0 +1,46 @@
+
+name: Deploy Django Backend
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-ruby-backend
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy to VPS
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          port: ${{ secrets.VPS_PORT }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          command_timeout: 10m
+          script: |
+            set -eu
+            cd /var/www/ruby_backend
+
+            git fetch origin main
+            git reset --hard origin/main
+
+            if [ -f requirements.txt ]; then
+              /var/www/ruby_backend/venv/bin/python -m pip install -r requirements.txt
+            fi
+
+            /var/www/ruby_backend/venv/bin/python manage.py check
+
+            systemctl restart ruby_backend
+            systemctl is-active --quiet ruby_backend
+
+            echo "Backend desplegado correctamente"
