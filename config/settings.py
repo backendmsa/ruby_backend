@@ -271,7 +271,7 @@ X_FRAME_OPTIONS = "DENY"
 
 # En producción (DEBUG=False) forzar HTTPS.
 if not DEBUG:
-    SECURE_SSL_REDIRECT                  = True
+    SECURE_SSL_REDIRECT                  = os.getenv("SECURE_SSL_REDIRECT", "False") == "True"
     SECURE_HSTS_SECONDS                  = 31536000  # 1 año
     SECURE_HSTS_INCLUDE_SUBDOMAINS       = True
     SECURE_HSTS_PRELOAD                  = True
