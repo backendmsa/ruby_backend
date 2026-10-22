@@ -16,7 +16,8 @@ from rest_framework.exceptions import (
 )
 
 from rest_framework.permissions import (
-    IsAuthenticated
+    IsAuthenticated,
+    BasePermission,
 )
 
 from rest_framework.decorators import action
@@ -32,9 +33,22 @@ from .services import (
     desactivar_variante,
 )
 
-from usuarios.permissions import IsAdmin
-
 from config.exceptions import BusinessException
+
+
+class PuedeCambiarEstadoArticulo(BasePermission):
+    """Activar/desactivar variantes: superadmin, admin y empleado activos."""
+
+    message = "No tienes permisos para cambiar el estado de artículos."
+
+    def has_permission(self, request, view):
+        usuario = request.user
+        return bool(
+            usuario
+            and usuario.is_authenticated
+            and getattr(usuario, "activo", False)
+            and getattr(usuario, "rol", None) in (0, 1, 2)
+        )
 
 
 class VariantePagination(PageNumberPagination):
@@ -303,7 +317,7 @@ class VarianteViewSet(
             return [IsAuthenticated()]
 
         if self.action in ["activar", "desactivar"]:
-            return [IsAuthenticated(), IsAdmin()]
+            return [IsAuthenticated(), PuedeCambiarEstadoArticulo()]
 
         return [IsAuthenticated()]
 

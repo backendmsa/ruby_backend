@@ -163,6 +163,9 @@ class MovimientoInventarioViewSet(
                     | Q(
                         variante__codigo_barras__icontains=search
                     )
+                    | Q(
+                        observaciones__icontains=search
+                    )
                 )
 
         # ------------------------------------------------------

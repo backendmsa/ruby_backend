@@ -3,6 +3,27 @@ from rest_framework import serializers
 from .models import Variante
 
 
+from decimal import Decimal
+
+from categorias.models import Categoria
+from variantes.precios import advertencias_precios
+from rest_framework.fields import empty
+
+
+class CategoriaOpcional(serializers.PrimaryKeyRelatedField):
+    def to_internal_value(self, data):
+        if isinstance(data, str) and not data.strip():
+            return None
+        return super().to_internal_value(data)
+
+
+class DecimalOpcional(serializers.DecimalField):
+    def run_validation(self, data=empty):
+        if data is None or (isinstance(data, str) and not data.strip()):
+            data = "0.00"
+        return super().run_validation(data)
+
+
 class VarianteSerializer(serializers.ModelSerializer):
 
     # ----------------------------------------------------------
@@ -19,10 +40,29 @@ class VarianteSerializer(serializers.ModelSerializer):
         source="producto.nombre",
         read_only=True,
     )
+
+    # Solo para PATCH/PUT. No cambia Variante.producto_id.
+    categoria = CategoriaOpcional(
+        queryset=Categoria.objects.all(), required=False,
+        allow_null=True, write_only=True,
+    )
+    advertencias_precios = serializers.SerializerMethodField(read_only=True)
+
+    costo = DecimalOpcional(
+        max_digits=10, decimal_places=2, required=False,
+        min_value=Decimal("0.00"),
+    )
+    precio_mayoreo = DecimalOpcional(
+        max_digits=10, decimal_places=2, required=False,
+        min_value=Decimal("0.00"),
+    )
     
     sku = serializers.CharField(
         max_length=100,
         validators=[],
+        required=False,
+        allow_blank=True,
+        allow_null=True,
     )
 
     codigo_barras = serializers.CharField(
@@ -67,6 +107,8 @@ class VarianteSerializer(serializers.ModelSerializer):
             "id",
             "producto",
             "producto_nombre",
+            "categoria",
+            "advertencias_precios",
             "codigo_barras",
             "sku",
             "nombre",
@@ -108,6 +150,9 @@ class VarianteSerializer(serializers.ModelSerializer):
 
         return fields
     
+    def get_advertencias_precios(self, obj):
+        return advertencias_precios(obj.costo, obj.precio_menudeo, obj.precio_mayoreo)
+
     def validate_nombre(self, value):
         value = value.strip()
 
@@ -123,12 +168,13 @@ class VarianteSerializer(serializers.ModelSerializer):
     # ==========================================================
 
     def validate_sku(self, value):
+        if value is None:
+            return None
+
         value = value.strip().upper()
 
         if not value:
-            raise serializers.ValidationError(
-                "El SKU es obligatorio."
-            )
+            return None
 
         if not all(
             caracter.isalnum() or caracter in "_-"
@@ -200,9 +246,9 @@ class VarianteSerializer(serializers.ModelSerializer):
     # ==========================================================
 
     def validate_precio_menudeo(self, value):
-        if value < 0:
+        if value <= 0:
             raise serializers.ValidationError(
-                "El precio menudeo no puede ser negativo."
+                "El precio de venta debe ser mayor que cero."
             )
 
         return value
@@ -237,6 +283,11 @@ class VarianteSerializer(serializers.ModelSerializer):
                 )
             })
         
+        if self.instance is None and "categoria" in self.initial_data:
+            raise serializers.ValidationError({
+                "categoria": "Selecciona la categoría del producto al crearlo; aquí solo se edita."
+            })
+
         if self.instance is not None and "producto" in self.initial_data:
             raise serializers.ValidationError({
                 "producto": (
@@ -323,20 +374,12 @@ class VarianteSerializer(serializers.ModelSerializer):
             else 0,
         )
 
-        if precio_menudeo < costo:
+        # Precio de venta obligatorio para ALTA; en PATCH de artículos
+        # históricos permitimos editar otros campos sin reescribir precios.
+        if self.instance is None and precio_menudeo <= 0:
             raise serializers.ValidationError({
-                "precio_menudeo": (
-                    "El precio menudeo no puede ser menor "
-                    "al costo."
-                )
+                "precio_menudeo": "El precio de venta debe ser mayor que cero."
             })
-
-        if precio_mayoreo < costo:
-            raise serializers.ValidationError({
-                "precio_mayoreo": (
-                    "El precio mayoreo no puede ser menor "
-                    "al costo."
-                )
-            })
+        # Venta o mayoreo bajo costo: solo advertencia en la respuesta.
 
         return data

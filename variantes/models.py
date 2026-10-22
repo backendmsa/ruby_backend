@@ -28,7 +28,9 @@ class Variante(models.Model):
 
     sku = models.CharField(
         max_length=100,
-        unique=True
+        unique=True,
+        null=True,
+        blank=True,
     )
 
     nombre = models.CharField(

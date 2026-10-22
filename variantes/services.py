@@ -35,20 +35,27 @@ def _validar_precios(
     costo,
     precio_menudeo,
     precio_mayoreo,
+    *,
+    exigir_venta=True,
 ):
-    if precio_menudeo < costo:
-        raise BusinessException(
-            "El precio menudeo no puede ser menor al costo."
-        )
+    if costo < 0:
+        raise BusinessException("El costo no puede ser negativo.")
 
-    if precio_mayoreo < costo:
-        raise BusinessException(
-            "El precio mayoreo no puede ser menor al costo."
-        )
+    if precio_menudeo < 0 or (exigir_venta and precio_menudeo == 0):
+        raise BusinessException("El precio de venta debe ser mayor que cero.")
+
+    if precio_mayoreo < 0:
+        raise BusinessException("El precio mayoreo no puede ser negativo.")
+
+    # Precios por debajo del costo se permiten: la API devuelve advertencias.
 
 
 def _normalizar_sku(sku):
-    return sku.strip().upper()
+    if sku is None:
+        return None
+
+    normalizado = sku.strip().upper()
+    return normalizado or None
 
 
 def _validar_unicidad(
@@ -126,6 +133,45 @@ def _obtener_variante_bloqueada(pk):
         raise BusinessException(
             "La variante solicitada no existe."
         )
+
+
+def _actualizar_producto_de_variante(variante, producto, cambios, usuario):
+    """Solo toca el padre si ninguna otra variante depende de él."""
+    categoria_pedida = cambios.pop("categoria", "__ausente__")
+    if categoria_pedida != "__ausente__":
+        if categoria_pedida is None and producto.categoria.nombre.casefold() == "sin clasificar":
+            categoria = producto.categoria
+        else:
+            # Importación local para evitar ciclo con el alta unificada.
+            from productos.articulos import _categoria_para_alta
+            categoria = _categoria_para_alta(categoria_pedida, usuario)
+        if categoria.pk != producto.categoria_id:
+            if producto.variantes.exclude(pk=variante.pk).exists():
+                raise BusinessException(
+                    "No puedes cambiar la categoría de este artículo porque "
+                    "comparte producto con otras variantes. No se modificó ninguna."
+                )
+            producto.categoria = categoria
+            producto.save(update_fields=["categoria", "fecha_actualizacion"])
+
+    nombre_nuevo = cambios.get("nombre")
+    if (
+        nombre_nuevo is not None
+        and nombre_nuevo != variante.nombre
+        and producto.nombre.casefold() == variante.nombre.casefold()
+        and not producto.variantes.exclude(pk=variante.pk).exists()
+    ):
+        # Artículo con un solo nombre visible: evitar "nombre viejo - nombre nuevo".
+        # No se ejecuta para padres con más de una variante.
+        from productos.articulos import _nombre_tecnico_producto
+        if Producto.objects.filter(nombre__iexact=nombre_nuevo).exclude(pk=producto.pk).exists():
+            nuevo_padre = _nombre_tecnico_producto(nombre_nuevo)
+        else:
+            nuevo_padre = nombre_nuevo
+        producto.nombre = nuevo_padre
+        producto.save(update_fields=["nombre", "fecha_actualizacion"])
+
+
 # ==============================================================
 # CREAR VARIANTE
 # ==============================================================
@@ -140,7 +186,7 @@ def crear_variante(*, validated_data, usuario):
     _validar_producto_activo(producto)
 
     validated_data["sku"] = _normalizar_sku(
-        validated_data["sku"]
+        validated_data.get("sku")
     )
 
     _validar_unicidad(
@@ -263,6 +309,9 @@ def actualizar_variante(
             validated_data["sku"]
     )
 
+    # Este PATCH cambia la categoría solo si la variante no tiene hermanas.
+    _actualizar_producto_de_variante(variante, producto_actual, validated_data, usuario)
+
     _validar_unicidad(
         producto=producto_actual,
         nombre=validated_data.get(
@@ -294,6 +343,7 @@ def actualizar_variante(
             "precio_mayoreo",
             variante.precio_mayoreo,
         ),
+        exigir_venta="precio_menudeo" in validated_data,
     )
 
     for campo, valor in validated_data.items():

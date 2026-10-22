@@ -90,6 +90,42 @@ def validar_descuento(valor):
     return descuento
 
 
+def validar_efectivo_recibido(valor, total, nombre_metodo):
+    """Importe opcional para el ticket. Nunca participa en el total de venta.
+
+    Las ventas de otros clientes anteriores pueden omitir el dato.
+    Si viene un importe, se exige método de efectivo y precisión de centavos.
+    """
+    if valor is None:
+        return None
+
+    if "efectivo" not in str(nombre_metodo).casefold():
+        raise BusinessException(
+            "Solo se admite efectivo recibido en pagos en efectivo."
+        )
+    if isinstance(valor, bool):
+        raise BusinessException("El efectivo recibido no es válido.")
+
+    try:
+        recibido = Decimal(str(valor))
+    except (InvalidOperation, TypeError, ValueError):
+        raise BusinessException("El efectivo recibido no es válido.")
+
+    if not recibido.is_finite() or recibido < 0:
+        raise BusinessException("El efectivo recibido no es válido.")
+
+    if recibido > Decimal("99999999.99"):
+        raise BusinessException("El efectivo recibido supera el límite permitido.")
+
+    if recibido != recibido.quantize(Decimal("0.01")):
+        raise BusinessException("El efectivo recibido debe tener máximo dos decimales.")
+
+    if recibido < total:
+        raise BusinessException("El efectivo recibido es menor que el total de la venta.")
+
+    return recibido.quantize(Decimal("0.01"))
+
+
 def validar_item_producto(item):
     """
     Valida un producto recibido en la venta.
@@ -801,9 +837,21 @@ def crear_venta(
     )
 
     # ----------------------------------------------------------
+    # EFECTIVO RECIBIDO (OPCIONAL / COMPATIBLE)
+    # ----------------------------------------------------------
+    # Se valida con el TOTAL REAL calculado en backend, antes del commit.
+    # No afecta el total vendido, IVA, descuento, inventario ni corte.
+    efectivo_recibido = validar_efectivo_recibido(
+        data.get("efectivo_recibido"),
+        total,
+        metodo_pago.nombre,
+    )
+
+    # ----------------------------------------------------------
     # ACTUALIZAR VENTA
     # ----------------------------------------------------------
 
+    venta.efectivo_recibido = efectivo_recibido
     venta.subtotal = subtotal_final
     venta.descuento = descuento
     venta.iva = iva
@@ -815,6 +863,7 @@ def crear_venta(
             "descuento",
             "iva",
             "total",
+            "efectivo_recibido",
         ]
     )
 

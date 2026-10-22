@@ -1,5 +1,15 @@
 from django.db import IntegrityError
-from django.db.models import Q
+from django.db.models import Q, CharField, Value
+from django.db.models.functions import Concat
+
+from rest_framework.exceptions import ValidationError
+
+from variantes.models import Variante
+from .articulos import crear_articulo
+from .serializers_articulos import (
+    ArticuloGestionSerializer,
+    RegistroArticuloSerializer,
+)
 
 from rest_framework import (
     viewsets,
@@ -288,6 +298,105 @@ class ProductoViewSet(
             },
             status=status.HTTP_201_CREATED,
         )
+
+    # ==========================================================
+    # REGISTRO UNIFICADO: SOLO NOMBRE DE VARIANTE VISIBLE
+    # ==========================================================
+
+    @action(detail=False, methods=["post"], url_path="registro-completo")
+    def registro_completo(self, request):
+        serializer = RegistroArticuloSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(
+                {"success": False, "message": "No se pudo registrar el artículo.",
+                 "data": serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            variante = crear_articulo(
+                validated_data=serializer.validated_data, usuario=request.user,
+            )
+        except ValidationError as exc:
+            return Response(
+                {"success": False, "message": "No se pudo registrar el artículo.",
+                 "data": exc.detail},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        except BusinessException as exc:
+            return Response(
+                {"success": False, "message": str(exc), "data": None},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        except IntegrityError:
+            return Response(
+                {"success": False,
+                 "message": "Conflicto de datos: el artículo no pudo registrarse. Intenta nuevamente.",
+                 "data": None},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        return Response(
+            {"success": True, "message": "Artículo registrado correctamente.",
+             "data": ArticuloGestionSerializer(variante).data},
+            status=status.HTTP_201_CREATED,
+        )
+
+    # ==========================================================
+    # GESTIÓN: UNA FILA POR VARIANTE, NOMBRE = Variante.nombre
+    # ==========================================================
+
+    @action(detail=False, methods=["get"], url_path="articulos")
+    def articulos(self, request):
+        queryset = Variante.objects.select_related("producto", "producto__categoria")
+        # Empleados activos también deben encontrar y recuperar artículos inactivos.
+        es_gestor = (getattr(request.user, "activo", False)
+                     and getattr(request.user, "rol", None) in (0, 1, 2))
+
+        if es_gestor:
+            activo = request.query_params.get("activo", "true").lower()
+            if activo not in ("true", "1", "false", "0", "todos"):
+                raise ValidationError({"activo": "Usa true, false o todos."})
+            if activo != "todos":
+                queryset = queryset.filter(activo=activo in ("true", "1"))
+        else:
+            queryset = queryset.filter(activo=True, producto__activo=True)
+
+        busqueda = request.query_params.get("search", "").strip()
+        if len(busqueda) > 100:
+            raise ValidationError({"search": "La búsqueda no puede superar 100 caracteres."})
+        if busqueda:
+            queryset = queryset.alias(
+                _nombre_completo_busqueda=Concat(
+                    "producto__nombre", Value(" - "), "nombre",
+                    output_field=CharField(),
+                )
+            )
+            queryset = queryset.filter(
+                Q(nombre__icontains=busqueda)
+                | Q(sku__icontains=busqueda)
+                | Q(codigo_barras__icontains=busqueda)
+                | Q(producto__nombre__icontains=busqueda)
+                | Q(_nombre_completo_busqueda__icontains=busqueda)
+                | Q(producto__categoria__nombre__icontains=busqueda)
+            )
+
+        categoria_id = request.query_params.get("categoria")
+        if categoria_id:
+            import uuid
+            try:
+                categoria_uuid = uuid.UUID(categoria_id)
+            except (TypeError, ValueError, AttributeError):
+                raise ValidationError({"categoria": "El ID de categoría no es válido."})
+            queryset = queryset.filter(producto__categoria_id=categoria_uuid)
+
+        queryset = queryset.order_by("nombre", "id")
+        pagina = self.paginate_queryset(queryset)
+        if pagina is not None:
+            return self.get_paginated_response(
+                ArticuloGestionSerializer(pagina, many=True).data
+            )
+        return Response(ArticuloGestionSerializer(queryset, many=True).data)
 
     # ==========================================================
     # MODIFICAR

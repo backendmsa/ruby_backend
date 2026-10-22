@@ -15,6 +15,13 @@ class VentaTicketSerializer(serializers.Serializer):
     folio = serializers.CharField()
     fecha = serializers.DateTimeField()
     metodo_pago = serializers.CharField()
+    # Campos opcionales: tickets de ventas anteriores continúan funcionando.
+    efectivo_recibido = serializers.DecimalField(
+        max_digits=10, decimal_places=2, allow_null=True, required=False
+    )
+    cambio = serializers.DecimalField(
+        max_digits=10, decimal_places=2, allow_null=True, required=False
+    )
     estado = serializers.CharField()
 
 

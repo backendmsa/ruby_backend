@@ -48,24 +48,16 @@ def validar_uuid(valor):
 
 
 def validar_observaciones(observaciones):
+    """El motivo es opcional, pero si se proporciona debe ser texto."""
     if observaciones is None:
-        raise BusinessException(
-            "Las observaciones son obligatorias."
-        )
+        return ""
 
     if not isinstance(observaciones, str):
         raise BusinessException(
             "Las observaciones deben ser texto."
         )
 
-    observaciones = observaciones.strip()
-
-    if not observaciones:
-        raise BusinessException(
-            "Las observaciones son obligatorias."
-        )
-
-    return observaciones
+    return observaciones.strip()
 
 
 def validar_cantidad(valor):
@@ -381,8 +373,10 @@ def registrar_ajuste(
     stock_defectuoso_anterior = variante.stock_defectuoso
     stock_defectuoso_nuevo = stock_defectuoso_anterior
 
+    # Mantener la explicación automática del ajuste aunque no indiquen motivo.
     observacion_final = (
-        f"{tipo_ajuste} de stock. {observaciones}"
+        f"{tipo_ajuste} de stock."
+        + (f" {observaciones}" if observaciones else "")
     )
 
     movimiento = _crear_movimiento(

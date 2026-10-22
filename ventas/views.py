@@ -257,6 +257,11 @@ def _serializar_venta(
         "descuento": venta.descuento,
         "iva": venta.iva,
         "total": venta.total,
+        "efectivo_recibido": venta.efectivo_recibido,
+        "cambio": (
+            venta.efectivo_recibido - venta.total
+            if venta.efectivo_recibido is not None else None
+        ),
         "estado": venta.estado,
     }
 

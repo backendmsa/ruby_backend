@@ -25,6 +25,11 @@ def generar_ticket(venta):
             "folio": venta.folio,
             "fecha": venta.fecha,
             "metodo_pago": venta.metodo_pago.nombre,
+            "efectivo_recibido": venta.efectivo_recibido,
+            "cambio": (
+                venta.efectivo_recibido - venta.total
+                if venta.efectivo_recibido is not None else None
+            ),
             "estado": venta.estado,
         },
 

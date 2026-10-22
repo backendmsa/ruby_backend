@@ -69,6 +69,15 @@ class Venta(models.Model):
         decimal_places=2,
     )
 
+    # Opcional para mantener compatibilidad con ventas antiguas y otros clientes.
+    # Es la cantidad entregada por el cliente, NO el ingreso de la caja.
+    efectivo_recibido = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+    )
+
     estado = models.CharField(
         max_length=20,
         choices=ESTADOS,
