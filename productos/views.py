@@ -6,6 +6,7 @@ from rest_framework.exceptions import ValidationError
 
 from variantes.models import Variante
 from .articulos import crear_articulo
+from productos.nombres_articulos import nombre_visible
 from .serializers_articulos import (
     ArticuloGestionSerializer,
     RegistroArticuloSerializer,
@@ -374,6 +375,7 @@ class ProductoViewSet(
             )
             queryset = queryset.filter(
                 Q(nombre__icontains=busqueda)
+                | Q(nombre_completo__icontains=busqueda)
                 | Q(sku__icontains=busqueda)
                 | Q(codigo_barras__icontains=busqueda)
                 | Q(producto__nombre__icontains=busqueda)

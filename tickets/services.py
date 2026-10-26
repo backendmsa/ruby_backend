@@ -1,6 +1,7 @@
 from empresa.models import Empresa
 
 from config.exceptions import BusinessException
+from productos.nombres_articulos import nombre_visible
 
 
 def generar_ticket(venta):
@@ -39,8 +40,8 @@ def generar_ticket(venta):
 
         "productos": [
             {
-                "producto": d.variante.producto.nombre,
-                "variante": d.variante.nombre,
+                "producto": (nombre_visible(d.variante) if d.variante.nombre_completo else d.variante.producto.nombre),
+                "variante": ("" if d.variante.nombre_completo else d.variante.nombre),
                 "cantidad": d.cantidad,
                 "precio": d.precio_unitario,
                 "subtotal": d.subtotal,

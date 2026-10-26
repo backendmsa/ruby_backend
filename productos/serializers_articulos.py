@@ -3,7 +3,6 @@
 El nombre del Producto padre es un detalle interno del modelo histórico.
 """
 from decimal import Decimal
-import re
 
 from rest_framework import serializers
 from rest_framework.fields import empty
@@ -11,6 +10,7 @@ from rest_framework.fields import empty
 from categorias.models import Categoria
 from variantes.models import Variante
 from variantes.precios import advertencias_precios
+from productos.nombres_articulos import nombre_visible
 
 
 class CategoriaOpcional(serializers.PrimaryKeyRelatedField):
@@ -113,23 +113,4 @@ class ArticuloGestionSerializer(serializers.ModelSerializer):
         return advertencias_precios(obj.costo, obj.precio_menudeo, obj.precio_mayoreo)
 
     def get_nombre_mostrar(self, obj):
-        """Nombre para la tabla sin alterar nombres históricos.
-
-        Evita presentar el sufijo técnico de productos nuevos con nombre repetido.
-        """
-        nombre_variante = obj.nombre.strip()
-        nombre_producto = obj.producto.nombre.strip()
-
-        if not nombre_producto or nombre_producto.casefold() == nombre_variante.casefold():
-            return nombre_variante
-
-        tecnico = re.fullmatch(r"(.*) (\[art-[0-9a-f]{12}\])", nombre_producto)
-        if tecnico:
-            # Padre técnico generado para descripciones repetidas.
-            # No se muestra nunca al empleado, incluso después de renombrar.
-            return nombre_variante
-
-        if nombre_variante.casefold() in {"unica", "única", "unico", "único"}:
-            return nombre_producto
-
-        return f"{nombre_producto} - {nombre_variante}"
+        return nombre_visible(obj)

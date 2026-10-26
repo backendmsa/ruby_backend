@@ -2,6 +2,9 @@ import uuid
 from django.db import transaction
 
 from variantes.models import Variante
+from productos.nombres_articulos import (
+    asegurar_nombre_disponible, bloquear_nombres_articulos, nombre_visible, normalizar_nombre,
+)
 from productos.models import Producto
 from inventario.services import registrar_entrada
 from bitacora.services import registrar_bitacora
@@ -179,6 +182,7 @@ def _actualizar_producto_de_variante(variante, producto, cambios, usuario):
 @transaction.atomic
 def crear_variante(*, validated_data, usuario):
 
+    bloquear_nombres_articulos()
     producto = _obtener_producto_bloqueado(
         validated_data["producto"].pk
     )
@@ -188,6 +192,12 @@ def crear_variante(*, validated_data, usuario):
     validated_data["sku"] = _normalizar_sku(
         validated_data.get("sku")
     )
+
+    # Las APIs antiguas de variantes también deben respetar la unicidad
+    # del nombre que ve Gestión, no solo la unicidad por producto.
+    from types import SimpleNamespace
+    candidato = SimpleNamespace(producto=producto, nombre=validated_data['nombre'], nombre_completo=None)
+    asegurar_nombre_disponible(nombre_visible(candidato))
 
     _validar_unicidad(
         producto=producto,
@@ -286,6 +296,11 @@ def actualizar_variante(
     validated_data,
     usuario,
 ):
+    bloquear_nombres_articulos()
+    validated_data = dict(validated_data)
+    nombre_completo_nuevo = validated_data.pop('nombre_completo', None)
+    if nombre_completo_nuevo is not None and 'nombre' in validated_data:
+        raise BusinessException('No envíes nombre y nombre_completo simultáneamente.')
     variante = _obtener_variante_bloqueada(
         instancia.pk
     )
@@ -308,6 +323,36 @@ def actualizar_variante(
         validated_data["sku"] = _normalizar_sku(
             validated_data["sku"]
     )
+
+    if nombre_completo_nuevo is not None:
+        nombre_completo_nuevo = ' '.join(nombre_completo_nuevo.split())
+        if not nombre_completo_nuevo or len(nombre_completo_nuevo) > 150:
+            raise BusinessException('El nombre completo debe tener entre 1 y 150 caracteres.')
+        asegurar_nombre_disponible(nombre_completo_nuevo, excluir_pk=variante.pk)
+        if producto_actual.variantes.exclude(pk=variante.pk).exists():
+            # Relación histórica intacta: el nombre visible es individual.
+            variante.nombre_completo = nombre_completo_nuevo
+        else:
+            # Un único artículo: mantener Variante y Producto sincronizados.
+            from productos.articulos import _nombre_tecnico_producto
+            nuevo_padre = nombre_completo_nuevo
+            if Producto.objects.filter(nombre__iexact=nuevo_padre).exclude(pk=producto_actual.pk).exists():
+                nuevo_padre = _nombre_tecnico_producto(nombre_completo_nuevo)
+            producto_actual.nombre = nuevo_padre
+            producto_actual.save(update_fields=['nombre', 'fecha_actualizacion'])
+            validated_data['nombre'] = nombre_completo_nuevo
+            variante.nombre_completo = None
+    elif 'nombre' in validated_data:
+        # Edición tradicional de Variante.nombre (otro endpoint o cliente):
+        # conservar compatibilidad y bloquear nombres visibles repetidos.
+        from types import SimpleNamespace
+        candidato = SimpleNamespace(
+            producto=producto_actual,
+            nombre=validated_data['nombre'],
+            nombre_completo=None,
+        )
+        asegurar_nombre_disponible(nombre_visible(candidato), excluir_pk=variante.pk)
+        variante.nombre_completo = None
 
     # Este PATCH cambia la categoría solo si la variante no tiene hermanas.
     _actualizar_producto_de_variante(variante, producto_actual, validated_data, usuario)

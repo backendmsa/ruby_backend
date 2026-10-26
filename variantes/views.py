@@ -36,6 +36,8 @@ from .services import (
 from config.exceptions import BusinessException
 
 
+from productos.nombres_articulos import nombre_visible
+
 class PuedeCambiarEstadoArticulo(BasePermission):
     """Activar/desactivar variantes: superadmin, admin y empleado activos."""
 
@@ -239,6 +241,7 @@ class VarianteViewSet(
                             producto__nombre__icontains=search
                         )
                         | Q(nombre__icontains=search)
+                        | Q(nombre_completo__icontains=search)
                         | Q(sku__icontains=search)
                         | Q(
                             codigo_barras__icontains=search
@@ -282,6 +285,7 @@ class VarianteViewSet(
                     producto__nombre__icontains=search
                 )
                 | Q(nombre__icontains=search)
+                | Q(nombre_completo__icontains=search)
                 | Q(sku__icontains=search)
                 | Q(
                     codigo_barras__icontains=search
@@ -530,8 +534,8 @@ class VarianteViewSet(
             data.append(
             {
                 "id": str(variante.id),
-                "producto": variante.producto.nombre,
-                "variante": variante.nombre,
+                "producto": nombre_visible(variante) if variante.nombre_completo else variante.producto.nombre,
+                "variante": "" if variante.nombre_completo else variante.nombre,
                 "codigo_barras": variante.codigo_barras,
                 "sku": variante.sku,
                 "stock": variante.stock,

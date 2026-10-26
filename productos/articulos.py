@@ -10,6 +10,7 @@ from categorias.models import Categoria
 from categorias.services import crear_categoria
 from config.exceptions import BusinessException
 from productos.models import Producto
+from productos.nombres_articulos import bloquear_nombres_articulos, asegurar_nombre_disponible
 from productos.serializers import ProductoSerializer
 from productos.services import crear_producto
 from variantes.serializers import VarianteSerializer
@@ -78,6 +79,8 @@ def crear_articulo(*, validated_data, usuario):
     se crean en la misma transacción; cualquier error revierte todo.
     """
     datos = dict(validated_data)
+    bloquear_nombres_articulos()
+    asegurar_nombre_disponible(datos['nombre'])
     categoria = _categoria_para_alta(datos.get("categoria"), usuario)
     nombre_variante = datos["nombre"]
     nombre_producto = _nombre_tecnico_producto(nombre_variante)

@@ -17,15 +17,18 @@ class CorteCajaSerializer(
         read_only=True
     )
 
-    usuario_nombre = serializers.CharField(
-        source="usuario.nombre",
-        read_only=True
-    )
+    usuario_nombre = serializers.SerializerMethodField()
 
     total_ventas = serializers.SerializerMethodField()
     numero_ventas = serializers.SerializerMethodField()
     total_reembolsos = serializers.SerializerMethodField()
     efectivo_esperado_actual = serializers.SerializerMethodField()
+    total_ventas_efectivo = serializers.SerializerMethodField()
+    total_ventas_tarjeta = serializers.SerializerMethodField()
+    total_ventas_transferencia = serializers.SerializerMethodField()
+    total_reembolsos_efectivo = serializers.SerializerMethodField()
+    total_reembolsos_tarjeta = serializers.SerializerMethodField()
+    total_reembolsos_transferencia = serializers.SerializerMethodField()
 
     class Meta:
 
@@ -46,6 +49,12 @@ class CorteCajaSerializer(
             "numero_ventas",
             "total_reembolsos",
             "efectivo_esperado_actual",
+            "total_ventas_efectivo",
+            "total_ventas_tarjeta",
+            "total_ventas_transferencia",
+            "total_reembolsos_efectivo",
+            "total_reembolsos_tarjeta",
+            "total_reembolsos_transferencia",
         ]
 
         read_only_fields = [
@@ -57,6 +66,10 @@ class CorteCajaSerializer(
             "fecha_fin",
             "diferencia",
         ]
+
+    def get_usuario_nombre(self, obj):
+        nombre = f"{obj.usuario.nombre} {obj.usuario.apellido}".strip()
+        return nombre or obj.usuario.usuario
 
     def validate_efectivo_inicial(
         self,
@@ -171,6 +184,38 @@ class CorteCajaSerializer(
             resultado
             or Decimal("0.00")
         )
+
+    @staticmethod
+    def _importe_por_metodo(obj, anotacion, modelo, metodo, *, es_reembolso=False):
+        """Importe monetario por método; usa anotaciones en listas e historial."""
+        if hasattr(obj, anotacion):
+            return getattr(obj, anotacion) or Decimal("0.00")
+        filtros = {"corte_caja": obj, "metodo_pago__nombre": metodo}
+        if es_reembolso:
+            filtros["tipo"] = "REEMBOLSO"
+            return (modelo.objects.filter(**filtros).aggregate(total=Sum("monto"))["total"]
+                    or Decimal("0.00"))
+        filtros["estado__in"] = ["COMPLETADA", "DEVUELTA"]
+        return (modelo.objects.filter(**filtros).aggregate(total=Sum("total"))["total"]
+                or Decimal("0.00"))
+
+    def get_total_ventas_efectivo(self, obj):
+        return self._importe_por_metodo(obj, "_total_efectivo_ventas", Venta, "EFECTIVO")
+
+    def get_total_ventas_tarjeta(self, obj):
+        return self._importe_por_metodo(obj, "_total_tarjeta_ventas", Venta, "TARJETA")
+
+    def get_total_ventas_transferencia(self, obj):
+        return self._importe_por_metodo(obj, "_total_transferencia_ventas", Venta, "TRANSFERENCIA")
+
+    def get_total_reembolsos_efectivo(self, obj):
+        return self._importe_por_metodo(obj, "_total_reembolsos_efectivo", MovimientoCaja, "EFECTIVO", es_reembolso=True)
+
+    def get_total_reembolsos_tarjeta(self, obj):
+        return self._importe_por_metodo(obj, "_total_reembolsos_tarjeta", MovimientoCaja, "TARJETA", es_reembolso=True)
+
+    def get_total_reembolsos_transferencia(self, obj):
+        return self._importe_por_metodo(obj, "_total_reembolsos_transferencia", MovimientoCaja, "TRANSFERENCIA", es_reembolso=True)
 
     def get_efectivo_esperado_actual(
         self,

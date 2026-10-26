@@ -37,20 +37,76 @@ class NombreMostrarArticulosTests(TestCase):
         self.assertEqual(producto.nombre, "Bolsa de Carrete")
         self.assertEqual(variante.nombre, "#1")
 
-    def test_unica_y_nombres_nuevos_repetidos(self):
-        categoria = Categoria.objects.create(nombre="BELLEZA")
-        producto = Producto.objects.create(nombre="Mascarilla Percapelli", categoria=categoria)
-        Variante.objects.create(producto=producto, nombre="Única", sku="UNICA1234")
-        response = self.api.get("/api/productos/articulos/", {"search": "Mascarilla Percapelli"})
-        self.assertEqual(response.status_code, 200, response.data)
-        self.assertEqual(response.data["results"][0]["nombre_mostrar"], "Mascarilla Percapelli")
+    def test_unica_y_registro_duplicado_de_articulo_historico(self):
+        categoria = Categoria.objects.create(nombre="CABELLO")
+        producto = Producto.objects.create(nombre="Suavizante en spray NBC", categoria=categoria)
+        Variante.objects.create(producto=producto, nombre="110 ml", sku="UNICA1234")
+        respuesta = self.api.post("/api/productos/registro-completo/", {
+            "nombre": "Suavizante en spray NBC - 110 ml",
+            "precio_menudeo": "70.00",
+        }, format="json")
+        self.assertEqual(respuesta.status_code, 400, respuesta.data)
+        self.assertEqual(Variante.objects.count(), 1)
 
-        datos = {"nombre": "Mascarilla nueva", "precio_menudeo": "70.00"}
-        for _ in range(2):
-            response = self.api.post("/api/productos/registro-completo/", datos, format="json")
-            self.assertEqual(response.status_code, 201, response.data)
-            self.assertEqual(response.data["data"]["nombre_mostrar"], datos["nombre"])
-        response = self.api.get("/api/productos/articulos/", {"search": datos["nombre"]})
-        self.assertEqual(response.status_code, 200, response.data)
-        self.assertEqual(response.data["count"], 2)
-        self.assertEqual({r["nombre_mostrar"] for r in response.data["results"]}, {datos["nombre"]})
+    def test_editar_una_presentacion_historica_muestra_nombre_completo(self):
+        categoria = Categoria.objects.create(nombre="CABELLO")
+        producto = Producto.objects.create(nombre="Suavizante en spray NBC", categoria=categoria)
+        uno = Variante.objects.create(producto=producto, nombre="110 ml", sku="SKU110")
+        dos = Variante.objects.create(producto=producto, nombre="220 ml", sku="SKU220")
+        r = self.api.patch(f"/api/variantes/{uno.pk}/", {
+            "nombre_completo": "Nueva marca suave - 150 ml",
+        }, format="json")
+        self.assertEqual(r.status_code, 200, r.data)
+        uno.refresh_from_db()
+        dos.refresh_from_db()
+        producto.refresh_from_db()
+        self.assertEqual(uno.nombre, "110 ml")
+        self.assertEqual(uno.nombre_completo, "Nueva marca suave - 150 ml")
+        self.assertEqual(dos.nombre, "220 ml")
+        self.assertEqual(producto.nombre, "Suavizante en spray NBC")
+        listado = self.api.get("/api/productos/articulos/?search=Nueva marca suave")
+        self.assertEqual(listado.status_code, 200, listado.data)
+        self.assertEqual(listado.data["results"][0]["nombre_mostrar"], "Nueva marca suave - 150 ml")
+
+    def test_edicion_no_permite_duplicado_con_otra_presentacion(self):
+        categoria = Categoria.objects.create(nombre="CABELLO")
+        producto = Producto.objects.create(nombre="Suavizante en spray NBC", categoria=categoria)
+        uno = Variante.objects.create(producto=producto, nombre="110 ml")
+        dos = Variante.objects.create(producto=producto, nombre="220 ml")
+        r = self.api.patch(f"/api/variantes/{dos.pk}/", {
+            "nombre_completo": "SUAVIZANTE EN SPRAY NBC - 110 ML",
+        }, format="json")
+        self.assertEqual(r.status_code, 400, r.data)
+        dos.refresh_from_db()
+        self.assertEqual(dos.nombre, "220 ml")
+        self.assertIsNone(dos.nombre_completo)
+
+    def test_renombrar_articulo_nuevo_deja_un_solo_nombre(self):
+        r = self.api.post("/api/productos/registro-completo/", {
+            "nombre": "Mascarilla original", "precio_menudeo": "70.00",
+        }, format="json")
+        self.assertEqual(r.status_code, 201, r.data)
+        id_variante = r.data["data"]["variante_id"]
+        r = self.api.patch(f"/api/variantes/{id_variante}/", {
+            "nombre_completo": "Mascarilla renovada",
+        }, format="json")
+        self.assertEqual(r.status_code, 200, r.data)
+        v = Variante.objects.get(pk=id_variante)
+        self.assertEqual(v.nombre, "Mascarilla renovada")
+        self.assertEqual(v.producto.nombre, "Mascarilla renovada")
+        self.assertIsNone(v.nombre_completo)
+
+    def test_rename_no_reasigna_id_producto_ni_variante(self):
+        categoria = Categoria.objects.create(nombre="CABELLO")
+        producto = Producto.objects.create(nombre="Spray NBC", categoria=categoria)
+        uno = Variante.objects.create(producto=producto, nombre="110 ml")
+        dos = Variante.objects.create(producto=producto, nombre="220 ml")
+        antes = (uno.pk, uno.producto_id)
+        r = self.api.patch(f"/api/variantes/{uno.pk}/", {
+            "nombre_completo": "Spray distinto 110 ml",
+        }, format="json")
+        self.assertEqual(r.status_code, 200, r.data)
+        uno.refresh_from_db()
+        self.assertEqual((uno.pk, uno.producto_id), antes)
+        dos.refresh_from_db()
+        self.assertEqual(dos.nombre, "220 ml")

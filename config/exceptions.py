@@ -1,128 +1,135 @@
+
 from rest_framework.views import exception_handler
 from rest_framework.response import Response
 from rest_framework import status
-from rest_framework.exceptions import NotFound
+from rest_framework.exceptions import (
+    AuthenticationFailed,
+    NotAuthenticated,
+    PermissionDenied,
+    Throttled,
+    ValidationError,
+)
 
 
 class BusinessException(Exception):
     """
     Excepción para errores de negocio esperados.
 
-    Debe lanzarse cuando una operación no puede completarse
-    por una regla de negocio (estado inválido, stock insuficiente,
-    plazo vencido, etc.).
+    Ejemplos:
+    - Stock insuficiente.
+    - Caja cerrada.
+    - Estado inválido.
+    - Plazo vencido.
     """
 
     def __init__(self, message, data=None):
-
         super().__init__(message)
-
         self.data = data
 
 
 def custom_exception_handler(exc, context):
     """
-    Manejador global de excepciones de Django REST Framework.
+    Manejador global de excepciones del POS.
 
-    Estandariza las respuestas automáticas del POS:
-
+    Mantiene el formato:
     {
         "success": False,
         "message": "...",
         "data": ...
     }
+
+    Conserva los códigos HTTP originales de DRF.
     """
 
-    # ----------------------------------------------------------
-    # EXCEPCIONES DE NEGOCIO
-    # ----------------------------------------------------------
-
+    # 1. Errores de negocio
     if isinstance(exc, BusinessException):
-
         return Response(
             {
                 "success": False,
                 "message": str(exc),
-                "data": exc.data
+                "data": exc.data,
             },
-            status=status.HTTP_400_BAD_REQUEST
+            status=status.HTTP_400_BAD_REQUEST,
         )
 
-    # ----------------------------------------------------------
-    # EXCEPCIONES DRF
-    # ----------------------------------------------------------
+    # 2. Manejo original de Django REST Framework
+    response = exception_handler(exc, context)
 
-    response = exception_handler(
-        exc,
-        context
-    )
-
-    # Si DRF no sabe manejar la excepción,
-    # dejamos que continúe su comportamiento normal.
+    # No ocultar excepciones inesperadas.
+    # Django conserva su manejo de errores 500.
     if response is None:
-        return response
+        return None
 
-    # ----------------------------------------------------------
-    # RECURSO NO ENCONTRADO
-    # ----------------------------------------------------------
+    data = None
 
-    if response.status_code == status.HTTP_404_NOT_FOUND:
+    # 3. Validaciones de campos
+    if isinstance(exc, ValidationError):
+        data = response.data
+        message = "La solicitud no es válida."
 
-        mensaje_original = response.data.get(
-            "detail",
-            ""
+        # Validaciones generales que no pertenecen
+        # a un campo específico.
+        if isinstance(data, list) and data:
+            message = str(data[0])
+
+        elif isinstance(data, dict):
+            non_field_errors = data.get("non_field_errors")
+
+            if isinstance(non_field_errors, list) and non_field_errors:
+                message = str(non_field_errors[0])
+            elif isinstance(non_field_errors, str) and non_field_errors:
+                message = non_field_errors
+
+    # 4. Autenticación
+    elif isinstance(exc, NotAuthenticated):
+        message = "Debes iniciar sesión para realizar esta acción."
+
+    elif isinstance(exc, AuthenticationFailed):
+        message = "No fue posible autenticar la solicitud."
+
+    # 5. Permisos
+    elif isinstance(exc, PermissionDenied):
+        message = "No tienes permisos para realizar esta acción."
+
+    # 6. Demasiadas solicitudes
+    elif isinstance(exc, Throttled):
+        message = (
+            "Has realizado demasiadas solicitudes. "
+            "Intenta nuevamente más tarde."
         )
 
-        if str(mensaje_original) == "La página solicitada no es válida.":
+    # 7. Recursos no encontrados
+    elif response.status_code == status.HTTP_404_NOT_FOUND:
+        original = ""
 
-            response.data = {
-                "success": False,
-                "message": str(mensaje_original),
-                "data": None,
-            }
+        if isinstance(response.data, dict):
+            original = str(response.data.get("detail", ""))
 
-            return response
+        if original in (
+            "La página solicitada no es válida.",
+            "Invalid page.",
+        ):
+            message = "La página solicitada no es válida."
+        else:
+            message = "El recurso solicitado no existe."
 
-        response.data = {
-            "success": False,
-            "message": "El recurso solicitado no existe.",
-            "data": None,
-        }
+    # 8. Otras excepciones administradas por DRF
+    elif isinstance(response.data, dict):
+        detail = response.data.get("detail")
 
-        return response
-
-    # ----------------------------------------------------------
-    # OBTENER MENSAJE
-    # ----------------------------------------------------------
-
-    if isinstance(response.data, dict):
-
-        message = response.data.get("detail")
-
-        if message is None:
-
-            # Errores de validación de DRF
+        if detail is not None:
+            message = str(detail)
+        else:
             message = "La solicitud no es válida."
-
             data = response.data
 
-        else:
-
-            data = None
-
     else:
-
         message = str(response.data)
 
-        data = None
-
-    # ----------------------------------------------------------
-    # RESPUESTA ESTÁNDAR DEL POS
-    # ----------------------------------------------------------
-
+    # 9. Formato estándar
     response.data = {
         "success": False,
-        "message": str(message),
+        "message": message,
         "data": data,
     }
 

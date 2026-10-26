@@ -23,6 +23,8 @@ from config.exceptions import BusinessException
 
 logger = logging.getLogger(__name__)
 
+from productos.nombres_articulos import nombre_visible
+
 class MovimientoInventarioPagination(PageNumberPagination):
     page_size = 50
     page_size_query_param = "page_size"
@@ -505,8 +507,8 @@ class MovimientoInventarioViewSet(
         data = [
             {
                 "variante_id": variante.id,
-                "producto": variante.producto.nombre,
-                "variante": variante.nombre,
+                "producto": nombre_visible(variante) if variante.nombre_completo else variante.producto.nombre,
+                "variante": "" if variante.nombre_completo else variante.nombre,
                 "stock": variante.stock,
                 "stock_minimo": variante.stock_minimo,
             }

@@ -7,6 +7,7 @@ from decimal import Decimal
 
 from categorias.models import Categoria
 from variantes.precios import advertencias_precios
+from productos.nombres_articulos import nombre_visible
 from rest_framework.fields import empty
 
 
@@ -47,6 +48,16 @@ class VarianteSerializer(serializers.ModelSerializer):
         allow_null=True, write_only=True,
     )
     advertencias_precios = serializers.SerializerMethodField(read_only=True)
+    nombre_mostrar = serializers.SerializerMethodField(read_only=True)
+    # Campo nuevo para Gestión unificada: permite editar el nombre completo
+    # sin confundirlo con el nombre histórico de presentación (Variante.nombre).
+    nombre_completo = serializers.CharField(
+        max_length=150, required=False, allow_blank=False, write_only=True,
+        trim_whitespace=True,
+    )
+
+    def get_nombre_mostrar(self, obj):
+        return nombre_visible(obj)
 
     costo = DecimalOpcional(
         max_digits=10, decimal_places=2, required=False,
@@ -107,6 +118,8 @@ class VarianteSerializer(serializers.ModelSerializer):
             "id",
             "producto",
             "producto_nombre",
+            "nombre_mostrar",
+            "nombre_completo",
             "categoria",
             "advertencias_precios",
             "codigo_barras",
@@ -270,6 +283,10 @@ class VarianteSerializer(serializers.ModelSerializer):
     # ==========================================================
 
     def validate(self, data):
+        if self.instance is None and 'nombre_completo' in data:
+            raise serializers.ValidationError({
+                'nombre_completo': 'El nombre completo se edita desde Gestión de artículos.'
+            })
 
         # ------------------------------------------------------
         # ACTIVO

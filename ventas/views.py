@@ -12,6 +12,7 @@ from rest_framework.pagination import PageNumberPagination
 from rest_framework.exceptions import ValidationError
 
 from .models import Venta
+from productos.nombres_articulos import nombre_visible
 from .serializers import VentaSerializer
 from .services import crear_venta, cancelar_venta
 
@@ -202,13 +203,12 @@ def _serializar_detalle(
     return {
         "detalle_id": detalle.id,
         "producto": (
-            detalle.variante
-            .producto
-            .nombre
+            nombre_visible(detalle.variante)
+            if detalle.variante.nombre_completo
+            else detalle.variante.producto.nombre
         ),
         "variante": (
-            detalle.variante
-            .nombre
+            "" if detalle.variante.nombre_completo else detalle.variante.nombre
         ),
         "variante_id": (
             detalle.variante

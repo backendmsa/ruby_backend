@@ -159,6 +159,12 @@ class CorteCajaViewSet(
             )
         )
 
+        ventas_tarjeta = ventas_base.filter(metodo_pago__nombre="TARJETA")
+        ventas_transferencia = ventas_base.filter(metodo_pago__nombre="TRANSFERENCIA")
+
+        reembolsos_tarjeta = reembolsos_base.filter(metodo_pago__nombre="TARJETA")
+        reembolsos_transferencia = reembolsos_base.filter(metodo_pago__nombre="TRANSFERENCIA")
+
         reembolsos_efectivo = (
             reembolsos_base
             .filter(
@@ -222,6 +228,38 @@ class CorteCajaViewSet(
                     Value(
                         Decimal("0.00")
                     ),
+                ),
+                _total_tarjeta_ventas=Coalesce(
+                    Subquery(
+                        ventas_tarjeta.values("corte_caja")
+                        .annotate(total=Sum("total"))
+                        .values("total")[:1]
+                    ),
+                    Value(Decimal("0.00")),
+                ),
+                _total_transferencia_ventas=Coalesce(
+                    Subquery(
+                        ventas_transferencia.values("corte_caja")
+                        .annotate(total=Sum("total"))
+                        .values("total")[:1]
+                    ),
+                    Value(Decimal("0.00")),
+                ),
+                _total_reembolsos_tarjeta=Coalesce(
+                    Subquery(
+                        reembolsos_tarjeta.values("corte_caja")
+                        .annotate(total=Sum("monto"))
+                        .values("total")[:1]
+                    ),
+                    Value(Decimal("0.00")),
+                ),
+                _total_reembolsos_transferencia=Coalesce(
+                    Subquery(
+                        reembolsos_transferencia.values("corte_caja")
+                        .annotate(total=Sum("monto"))
+                        .values("total")[:1]
+                    ),
+                    Value(Decimal("0.00")),
                 ),
                 _total_reembolsos_efectivo=Coalesce(
                     Subquery(

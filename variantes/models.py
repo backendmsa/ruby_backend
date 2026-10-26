@@ -37,6 +37,12 @@ class Variante(models.Model):
         max_length=150
     )
 
+    # Nombre de gestión opcional para renombrar de forma independiente una
+    # presentación histórica cuyo Producto padre es compartido.
+    nombre_completo = models.CharField(
+        max_length=150, null=True, blank=True,
+    )
+
     # ==========================================================
     # STOCK VENDIBLE
     # ==========================================================

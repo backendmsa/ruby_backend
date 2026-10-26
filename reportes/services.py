@@ -26,7 +26,8 @@ def dinero(valor):
 
 
 def _nombre_usuario(obj):
-    return f"{obj.nombre} {obj.apellido}"
+    nombre = f"{obj.nombre} {obj.apellido}".strip()
+    return nombre or obj.usuario
 
 
 def _totales_por_metodo(qs, campo_monto):

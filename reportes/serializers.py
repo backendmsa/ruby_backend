@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from decimal import Decimal
+from productos.nombres_articulos import nombre_visible
 
 # ============================================================
 # REPORTE DE VENTAS
@@ -77,13 +78,14 @@ class ReporteInventarioSerializer(
 
     id = serializers.UUIDField()
 
-    producto = serializers.CharField(
-        source="producto.nombre"
-    )
+    producto = serializers.SerializerMethodField()
+    variante = serializers.SerializerMethodField()
 
-    variante = serializers.CharField(
-        source="nombre"
-    )
+    def get_producto(self, obj):
+        return nombre_visible(obj) if obj.nombre_completo else obj.producto.nombre
+
+    def get_variante(self, obj):
+        return "" if obj.nombre_completo else obj.nombre
 
     sku = serializers.CharField()
 
@@ -124,13 +126,14 @@ class ReporteStockBajoSerializer(
 
     id = serializers.UUIDField()
 
-    producto = serializers.CharField(
-        source="producto.nombre"
-    )
+    producto = serializers.SerializerMethodField()
+    variante = serializers.SerializerMethodField()
 
-    variante = serializers.CharField(
-        source="nombre"
-    )
+    def get_producto(self, obj):
+        return nombre_visible(obj) if obj.nombre_completo else obj.producto.nombre
+
+    def get_variante(self, obj):
+        return "" if obj.nombre_completo else obj.nombre
 
     stock_actual = serializers.IntegerField(
         source="stock"

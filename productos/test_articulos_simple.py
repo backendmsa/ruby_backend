@@ -78,16 +78,26 @@ class RegistroArticulosSimpleTests(TestCase):
         self.assertEqual(variante.stock_minimo, 0)
         self.assertEqual(variante.costo, Decimal("0.00"))
 
-    def test_descripciones_repetidas_sin_alterar_el_nombre_visible(self):
+    def test_no_permite_dos_articulos_con_el_mismo_nombre_visible(self):
         self.assertEqual(self.alta().status_code, 201)
-        response = self.alta()
-        self.assertEqual(response.status_code, 201, response.data)
-        variantes = list(Variante.objects.select_related("producto").order_by("id"))
-        self.assertEqual(len(variantes), 2)
-        self.assertEqual({v.nombre for v in variantes}, {"Mascarilla de prueba"})
-        self.assertEqual(len({v.producto.nombre.casefold() for v in variantes}), 2)
-        self.assertIsNone(variantes[0].sku)
-        self.assertIsNone(variantes[1].sku)
+        response = self.alta(nombre="  MASCARILLA    de prueba ")
+        self.assertEqual(response.status_code, 400, response.data)
+        self.assertIn("Ya existe un artículo", response.data["message"])
+        self.assertEqual(Variante.objects.count(), 1)
+
+    def test_duplicado_con_categoria_diferente_se_rechaza(self):
+        self.assertEqual(self.alta().status_code, 201)
+        nueva_categoria = Categoria.objects.create(nombre="OTRA CATEGORIA")
+        respuesta = self.alta(categoria=str(nueva_categoria.pk))
+        self.assertEqual(respuesta.status_code, 400, respuesta.data)
+        self.assertEqual(Variante.objects.count(), 1)
+
+    def test_duplicado_inactivo_tambien_se_rechaza(self):
+        self.assertEqual(self.alta().status_code, 201)
+        Variante.objects.update(activo=False)
+        respuesta = self.alta()
+        self.assertEqual(respuesta.status_code, 400, respuesta.data)
+        self.assertEqual(Variante.objects.count(), 1)
 
     def test_error_de_variante_revierte_todo_incluso_categoria(self):
         response = self.alta(codigo_barras="INVALIDO")

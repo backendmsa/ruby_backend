@@ -118,14 +118,15 @@ class EdicionPreciosFlexiblesTests(TestCase):
         self.assertEqual(listado.status_code, 200, listado.data)
         self.assertEqual(listado.data["results"][0]["nombre_mostrar"], "Mascarilla Premium")
 
-    def test_renombre_nuevo_duplicado_no_revela_nombre_tecnico(self):
-        self.nuevo(nombre="Mascarilla Nueva")
-        variante2 = self.nuevo(nombre="Mascarilla Nueva")
-        r = self.patch(variante2, nombre="Mascarilla Editada")
-        self.assertEqual(r.status_code, 200, r.data)
-        listado = self.api.get("/api/productos/articulos/", {"search": "Mascarilla Editada"})
-        self.assertEqual(listado.status_code, 200, listado.data)
-        self.assertEqual(listado.data["results"][0]["nombre_mostrar"], "Mascarilla Editada")
+    def test_renombre_nuevo_duplicado_se_rechaza(self):
+        primera = self.nuevo(nombre="Mascarilla Nueva")
+        segunda = self.nuevo(nombre="Mascarilla Editada")
+        r = self.patch(segunda, nombre_completo="Mascarilla Nueva")
+        self.assertEqual(r.status_code, 400, r.data)
+        segunda.refresh_from_db()
+        self.assertEqual(segunda.nombre, "Mascarilla Editada")
+        primera.refresh_from_db()
+        self.assertEqual(primera.nombre, "Mascarilla Nueva")
 
     def test_stock_directo_rechazado_y_sku_persistente(self):
         variante = self.nuevo(sku="SKU-PRUEBA-9")
