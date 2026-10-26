@@ -15,6 +15,7 @@ from bitacora.services import registrar_bitacora
 from config.exceptions import BusinessException
 
 from .models import Garantia
+from detalle_venta.garantia import meses_de_garantia, fecha_vencimiento_de_garantia
 
 
 
@@ -57,10 +58,10 @@ def _validar_detalle_variante(venta, data):
     return detalle_venta, variante
 
 
-def _validar_vigencia(venta, variante):
-    if not variante.garantia_meses:
+def _validar_vigencia(detalle_venta):
+    if not meses_de_garantia(detalle_venta):
         raise BusinessException("Este producto no tiene garantía configurada.")
-    fecha_limite = venta.fecha + relativedelta(months=variante.garantia_meses)
+    fecha_limite = fecha_vencimiento_de_garantia(detalle_venta)
     if timezone.now() > fecha_limite:
         raise BusinessException(
             f"La garantía de este producto venció el {fecha_limite.strftime('%d/%m/%Y')}."
@@ -410,7 +411,7 @@ def crear_garantia(data, usuario):
     if cantidad > detalle_venta.cantidad:
         raise BusinessException("La cantidad solicitada para garantía no puede superar la cantidad vendida.")
 
-    _validar_vigencia(venta, variante)
+    _validar_vigencia(detalle_venta)
     _validar_disponibilidad(detalle_venta, cantidad)
 
     garantia = Garantia.objects.create(

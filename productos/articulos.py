@@ -108,6 +108,7 @@ def crear_articulo(*, validated_data, usuario):
         "precio_mayoreo": datos["precio_mayoreo"],
         "stock": datos["stock"],
         "stock_minimo": datos["stock_minimo"],
+        "garantia_meses": datos.get("garantia_meses"),
     }
     variante_serializer = VarianteSerializer(data=datos_variante)
     variante_serializer.is_valid(raise_exception=True)

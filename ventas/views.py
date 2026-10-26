@@ -13,6 +13,7 @@ from rest_framework.exceptions import ValidationError
 
 from .models import Venta
 from productos.nombres_articulos import nombre_visible
+from detalle_venta.garantia import meses_de_garantia, fecha_vencimiento_de_garantia
 from .serializers import VentaSerializer
 from .services import crear_venta, cancelar_venta
 
@@ -220,6 +221,9 @@ def _serializar_detalle(
         "cantidad_disponible": (
             cantidad_disponible
         ),
+        "garantia_meses": meses_de_garantia(detalle),
+        "garantia_fecha_vencimiento": fecha_vencimiento_de_garantia(detalle),
+        "garantia_plazo_historico": detalle.garantia_meses is not None,
         "precio_unitario": (
             detalle.precio_unitario
         ),

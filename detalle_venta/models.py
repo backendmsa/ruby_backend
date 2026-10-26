@@ -27,6 +27,9 @@ class DetalleVenta(models.Model):
         related_name="detalles_venta",
     )
 
+    # Meses pactados al vender. NULL se reserva a ventas históricas sin captura.
+    garantia_meses = models.PositiveIntegerField(null=True, blank=True)
+
     cantidad = models.PositiveIntegerField(
         validators=[
             MinValueValidator(1),

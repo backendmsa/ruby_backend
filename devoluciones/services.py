@@ -9,6 +9,7 @@ from datetime import timedelta
 from ventas.models import Venta 
 from empresa.models import Empresa 
 from detalle_venta.models import DetalleVenta 
+from detalle_venta.garantia import meses_de_garantia, fecha_vencimiento_de_garantia
 from inventario.models import MovimientoInventario 
 from cajas.models import Caja 
 from corte_caja.models import MovimientoCaja, CorteCaja 
@@ -112,19 +113,14 @@ def _validar_garantia(devolucion):
     ahora = timezone.now()
 
     for detalle in detalles:
-        variante = detalle.detalle_venta.variante
+        detalle_venta = detalle.detalle_venta
 
-        if not variante.garantia_meses:
+        if not meses_de_garantia(detalle_venta):
             raise BusinessException(
                 "Este producto no tiene garantía configurada."
             )
 
-        fecha_limite = (
-            venta.fecha
-            + relativedelta(
-                months=variante.garantia_meses
-            )
-        )
+        fecha_limite = fecha_vencimiento_de_garantia(detalle_venta)
 
         if ahora > fecha_limite:
             raise BusinessException(

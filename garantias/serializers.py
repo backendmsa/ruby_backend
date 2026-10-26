@@ -1,6 +1,7 @@
 from rest_framework import serializers
 
 from .models import Garantia
+from detalle_venta.garantia import meses_de_garantia, fecha_vencimiento_de_garantia
 
 
 class CrearGarantiaSerializer(serializers.Serializer):
@@ -145,9 +146,18 @@ class GarantiaSerializer(serializers.ModelSerializer):
         allow_null=True
     )
 
-    garantia_meses = serializers.IntegerField(
-        source="variante.garantia_meses"
-    )
+    garantia_meses = serializers.SerializerMethodField()
+    fecha_vencimiento = serializers.SerializerMethodField()
+    garantia_plazo_historico = serializers.SerializerMethodField()
+
+    def get_garantia_meses(self, obj):
+        return meses_de_garantia(obj.detalle_venta)
+
+    def get_fecha_vencimiento(self, obj):
+        return fecha_vencimiento_de_garantia(obj.detalle_venta)
+
+    def get_garantia_plazo_historico(self, obj):
+        return obj.detalle_venta.garantia_meses is not None
 
     class Meta:
 
@@ -162,6 +172,8 @@ class GarantiaSerializer(serializers.ModelSerializer):
             "variante_nueva",
             "cantidad",
             "garantia_meses",
+            "fecha_vencimiento",
+            "garantia_plazo_historico",
             "motivo",
             "estado",
             "resolucion",

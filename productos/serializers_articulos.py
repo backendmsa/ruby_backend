@@ -72,6 +72,7 @@ class RegistroArticuloSerializer(serializers.Serializer):
     # El campo stock representa SOLO el stock inicial durante esta alta.
     stock = EnteroOpcional(required=False, default=0, min_value=0, max_value=10000)
     stock_minimo = EnteroOpcional(required=False, default=0, min_value=0)
+    garantia_meses = serializers.IntegerField(required=False, allow_null=True, min_value=0)
 
     def validate_nombre(self, value):
         if not value.strip():
@@ -105,7 +106,7 @@ class ArticuloGestionSerializer(serializers.ModelSerializer):
         fields = [
             "variante_id", "producto_id", "nombre", "nombre_mostrar", "advertencias_precios", "categoria", "categoria_nombre",
             "sku", "codigo_barras", "costo", "precio_menudeo", "precio_mayoreo",
-            "stock", "stock_minimo", "activo", "fecha_actualizacion",
+            "stock", "stock_minimo", "garantia_meses", "activo", "fecha_actualizacion",
         ]
         read_only_fields = fields
 

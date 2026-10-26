@@ -476,6 +476,8 @@ def procesar_item_venta(
         venta=venta,
         variante=variante,
         cantidad=cantidad,
+        # Congelar el plazo aplicable a esta venta (0 si no tiene garantía).
+        garantia_meses=(variante.garantia_meses if variante.garantia_meses is not None else 0),
         precio_unitario=precio_unitario,
         descuento=Decimal("0.00"),
         subtotal=subtotal_linea,
