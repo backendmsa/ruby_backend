@@ -26,6 +26,9 @@ from rest_framework.pagination import PageNumberPagination
 
 from .models import Variante
 from .serializers import VarianteSerializer
+from .precio_masivo import (
+    CambioPrecioMasivoSerializer, actualizar_precios_masivos, MAX_VARIANTES,
+)
 from .services import (
     crear_variante,
     actualizar_variante,
@@ -320,7 +323,7 @@ class VarianteViewSet(
         ]:
             return [IsAuthenticated()]
 
-        if self.action in ["activar", "desactivar"]:
+        if self.action in ["activar", "desactivar", "precio_masivo"]:
             return [IsAuthenticated(), PuedeCambiarEstadoArticulo()]
 
         return [IsAuthenticated()]
@@ -488,6 +491,60 @@ class VarianteViewSet(
             },
             status=status.HTTP_200_OK
         )
+
+    # ==========================================================
+    # ACTUALIZACIÓN MASIVA DEL PRECIO DE VENTA
+    # ==========================================================
+
+    @action(detail=False, methods=["get", "post"], url_path="precio-masivo")
+    def precio_masivo(self, request):
+        if request.method == "GET":
+            producto_id = request.query_params.get("producto_id")
+            try:
+                producto_uuid = uuid.UUID(str(producto_id))
+            except (TypeError, ValueError, AttributeError):
+                return Response(
+                    {"success": False, "message": "Producto inválido.", "data": None},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            variantes = list(
+                Variante.objects.filter(producto_id=producto_uuid)
+                .select_related("producto")
+                .order_by("nombre", "id")[:MAX_VARIANTES + 1]
+            )
+            if len(variantes) > MAX_VARIANTES:
+                return Response(
+                    {"success": False, "message": "El producto tiene más de 200 variantes. Se requiere procesarlo en lotes revisados.", "data": None},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            return Response({
+                "success": True,
+                "data": [{
+                    "id": str(v.id),
+                    "nombre": nombre_visible(v),
+                    "precio_menudeo": str(v.precio_menudeo),
+                    "activo": v.activo,
+                } for v in variantes],
+            })
+
+        serializer = CambioPrecioMasivoSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response({
+                "success": False, "message": "Revisa el precio y las variantes seleccionadas.",
+                "data": serializer.errors,
+            }, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            resultado = actualizar_precios_masivos(
+                ids=serializer.validated_data["ids"],
+                precio=serializer.validated_data["precio_menudeo"],
+                usuario=request.user,
+            )
+        except BusinessException as exc:
+            return Response(
+                {"success": False, "message": str(exc), "data": None},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response({"success": True, "message": "Precios actualizados.", "data": resultado})
 
     # ==========================================================
     # ALERTAS DE STOCK
